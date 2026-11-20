@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M68 机器人租赁平台 · 基础版</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{--bg:#0f141b;--panel:#17202a;--line:#253041;--fg:#dbe4ee;--mut:#7d8ea3;--acc:#3ba1ff;--warn:#ffb020;--crit:#ff5c5c;--ok:#34c77b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 "PingFang SC","Microsoft YaHei",sans-serif;display:flex;height:100vh;overflow:hidden}
+.side{width:340px;min-width:340px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--panel)}
+.top{padding:14px 16px;border-bottom:1px solid var(--line)}
+.top h1{font-size:16px;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.stat{background:#101822;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:18px}
+.stat span{font-size:11px;color:var(--mut)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;color:var(--mut);padding:10px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--acc)}
+.pane{flex:1;overflow:auto;padding:8px}
+.card{background:#101822;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer}
+.card:hover{border-color:var(--acc)}
+.card .t{display:flex;justify-content:space-between;align-items:center}
+.card .t b{font-size:14px}
+.badge{font-size:11px;padding:2px 8px;border-radius:10px}
+.b-on{background:#0f3d2a;color:var(--ok)}.b-off{background:#3d2020;color:var(--crit)}
+.b-batt{background:#3d3420;color:var(--warn)}.b-src{background:#1c2a3d;color:var(--acc)}
+.mut{color:var(--mut);font-size:12px;margin-top:4px}
+.main{flex:1;position:relative}
+#map{width:100%;height:100%}
+.detail{position:absolute;top:12px;right:12px;width:320px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;z-index:1000;max-height:calc(100% - 24px);overflow:auto}
+.detail h2{font-size:15px;margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.kv span:first-child{color:var(--mut)}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+.btn.sec{background:#243144;color:var(--fg)}
+.btnrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+input,select{background:#101822;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;width:100%;font-size:13px}
+label{font-size:12px;color:var(--mut);display:block;margin:8px 0 3px}
+.alm{border-left:3px solid var(--warn)}
+.alm.crit{border-left-color:var(--crit)}
+.alm.info{border-left-color:var(--acc)}
+.drawbar{position:absolute;top:12px;left:12px;z-index:1000;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;gap:6px;align-items:center}
+input[type=text].tok{position:fixed;bottom:12px;right:12px;width:220px;z-index:1001;opacity:.5}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:center;justify-content:center}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;width:360px;max-height:80vh;overflow:auto}
+.modal h3{font-size:15px;margin-bottom:10px}
+.chk{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
+.chk input{width:auto}
+.fence-item{display:flex;justify-content:space-between;align-items:flex-start}
+.fence-item .acts{display:flex;gap:6px;margin-top:4px}
+.fence-item .btn{padding:3px 9px;font-size:12px}
+.tagrow{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.tag{font-size:11px;background:#1c2a3d;color:var(--acc);padding:1px 7px;border-radius:9px}
+</style>
+</head>
+<body>
+<div class="side">
+  <div class="top">
+    <h1>定位总览</h1>
+    <div class="stats">
+      <div class="stat"><b id="s-total">-</b><span>设备</span></div>
+      <div class="stat"><b id="s-online" style="color:var(--ok)">-</b><span>在线</span></div>
+      <div class="stat"><b id="s-batt" style="color:var(--warn)">-</b><span>电池</span></div>
+      <div class="stat"><b id="s-alarm" style="color:var(--crit)">-</b><span>告警</span></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="on" data-tab="dev">设备</button>
+    <button data-tab="alm">告警</button>
+    <button data-tab="fence">围栏</button>
+  </div>
+  <div class="pane" id="pane"></div>
+</div>
+<div class="main">
+  <div id="map"></div>
+  <div class="drawbar">
+    <button class="btn sec" id="b-circle">＋圆形围栏</button>
+    <button class="btn sec" id="b-poly">＋多边形</button>
+    <span class="mut" id="drawhint"></span>
+  </div>
+  <div class="detail" id="detail" style="display:none"></div>
+</div>
+<div class="modal" id="fmodal" style="display:none">
+  <div class="box">
+    <h3 id="fm-title">围栏</h3>
+    <label>名称</label><input id="fm-name" type="text"/>
+    <label>场地</label><input id="fm-site" type="text"/>
+    <label>边界缓冲 (m)</label><input id="fm-buffer" type="text" value="50"/>
+    <div class="chk" style="margin-top:8px">
+      <input type="checkbox" id="fm-all"/> <span>对所有设备生效</span>
+    </div>
+    <div id="fm-devlist" style="margin-top:6px"></div>
+    <div style="display:flex;gap:14px;margin-top:10px">
+      <div class="chk"><input type="checkbox" id="fm-enter" checked/> <span>进入告警</span></div>
+      <div class="chk"><input type="checkbox" id="fm-leave" checked/> <span>离开告警</span></div>
+    </div>
+    <div class="btnrow" style="margin-top:14px">
+      <button class="btn" id="fm-save">保存</button>
+      <button class="btn sec" id="fm-cancel">取消</button>
+    </div>
+  </div>
+</div>
+<input type="text" class="tok" id="tok" placeholder="API token (change-me)"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
